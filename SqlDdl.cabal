@@ -1,0 +1,145 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.35.0.
+--
+-- see: https://github.com/sol/hpack
+
+name:           SqlDdl
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/hugodro/SqlDdl#readme>
+homepage:       https://github.com/hugodro/SqlDdl#readme
+bug-reports:    https://github.com/hugodro/SqlDdl/issues
+author:         Hugo desRosiers
+maintainer:     hugo.desrosiers@boardingcities.com
+copyright:      Boarding Cities
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    CHANGELOG.md
+
+source-repository head
+  type: git
+  location: https://github.com/hugodro/SqlDdl
+
+library
+  exposed-modules:
+      Commands
+      Commands.Help
+      Commands.Parse
+      Commands.Version
+      DB.Connect
+      DB.Opers
+      Ddl.AlterParser
+      Ddl.CreateParser
+      Ddl.Extras
+      Ddl.Interpret
+      Ddl.Parsers
+      MainLogic
+      Options
+      Options.Cli
+      Options.ConfFile
+      Options.Runtime
+  other-modules:
+      Paths_SqlDdl
+  hs-source-dirs:
+      src
+  default-extensions:
+      OverloadedStrings
+      DuplicateRecordFields
+      OverloadedRecordDot
+  ghc-options: -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , directory
+    , filepath
+    , gitrev
+    , hasql
+    , hasql-pool
+    , hasql-th
+    , headed-megaparsec
+    , megaparsec
+    , mtl
+    , optparse-applicative
+    , postgresql-binary
+    , postgresql-syntax
+    , text
+    , time
+    , vector
+    , yaml
+  default-language: Haskell2010
+
+executable SqlDdl
+  main-is: Main.hs
+  other-modules:
+      Paths_SqlDdl
+  hs-source-dirs:
+      app
+  default-extensions:
+      OverloadedStrings
+      DuplicateRecordFields
+      OverloadedRecordDot
+  ghc-options: -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      SqlDdl
+    , aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , directory
+    , filepath
+    , gitrev
+    , hasql
+    , hasql-pool
+    , hasql-th
+    , headed-megaparsec
+    , megaparsec
+    , mtl
+    , optparse-applicative
+    , postgresql-binary
+    , postgresql-syntax
+    , text
+    , time
+    , vector
+    , yaml
+  default-language: Haskell2010
+
+test-suite SqlDdl-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_SqlDdl
+  hs-source-dirs:
+      test
+  default-extensions:
+      OverloadedStrings
+      DuplicateRecordFields
+      OverloadedRecordDot
+  ghc-options: -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      SqlDdl
+    , aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , directory
+    , filepath
+    , gitrev
+    , hasql
+    , hasql-pool
+    , hasql-th
+    , headed-megaparsec
+    , megaparsec
+    , mtl
+    , optparse-applicative
+    , postgresql-binary
+    , postgresql-syntax
+    , text
+    , time
+    , vector
+    , yaml
+  default-language: Haskell2010
