@@ -1,6 +1,6 @@
 module Ddl.CreateParser where
 
-import Control.Applicative (asum, optional)
+import Control.Applicative (asum, optional, many)
 
 import Data.List.NonEmpty (NonEmpty (..), head, (<|))
 import Data.Void (Void)
@@ -31,7 +31,11 @@ data CreateColumnItem = CreateColumnItem A.Ident ColumnSpec
 
 data ColumnSpec =
   IntCS
-  | VarcharCS Int
+  | VarcharCS (Maybe Int)
+  deriving (Show)
+
+data ConstrintSpec =
+  TodoST
   deriving (Show)
 
 
@@ -83,17 +87,219 @@ columnDefItem = do
   -- Type definition
   space1
   b <- colDefinition
+  c <- optional constraintDef
   return $ CreateColumnItem a b
+
 
 colDefinition =
   asum [
-    do
+      do
       P.keyword "int"
       return $ IntCS
     , do
+      P.keyword "integer"
+      return $ IntCS
+    , do
       P.keyword "varchar"
-      return $ VarcharCS 8
+      a <- optional (
+          P.inParens decimal
+        )
+      return $ VarcharCS a
   ]
+
+constraintDef = do
+  a <- optional (do
+      space1
+      P.keyword "constraint"
+      space1
+      P.ident
+      return TodoST
+    )
+  b <- many $ asum [
+      nullity
+      , checkExpr
+      , defaultExpr
+      , generatedExpr
+      , unicity
+      , primaryKey
+      , referenceDef
+      , deferrecity
+      , initiallity
+    ]
+  return TodoST
+
+
+nullity = do
+  space1
+  a <- optional ( P.keyword "not" *> space1 )
+  P.keyword "null"
+  return TodoST
+
+checkExpr = do
+  space1
+  P.keyword "check"
+  space1
+  a <- P.inParens P.ident      -- TODO: use expression
+  b <- optional ( do
+      P.keyword "no"
+      space1
+      P.keyword "inherit"
+    )
+  return TodoST
+
+defaultExpr = do
+  space1
+  P.keyword "default"
+  space1
+  a <- P.ident     -- TODO: use expression
+  return TodoST
+
+generatedExpr = do
+  space1
+  P.keyword "generated"
+  space1
+  a <- asum [
+        do
+        P.keyword "always"
+        space1
+        P.keyword "as"
+        space1
+        c <- asum [
+            do
+              P.inParens P.ident
+              space1
+              P.keyword "stored"
+              return TodoST
+            , do
+              P.keyword "identity"
+              space1
+              b <- optional ( P.inParens P.ident )    -- TODO: use sequence_options
+              return TodoST
+          ]
+        return TodoST
+      , do
+        P.keyword "by"
+        space1
+        P.keyword "default"
+        space1
+        P.keyword "as"
+        space1
+        P.keyword "identity"
+        space1
+        b <- optional (
+            P.inParens P.ident    -- TODO: use sequence_options
+          )
+        return TodoST
+    ]
+  return TodoST
+
+unicity = do
+  space1
+  P.keyword "unique"
+  a <- optional ( do
+      space1
+      P.keyword "nulls"
+      space1
+      b <- optional ( P.keyword "not" *> space1 )
+      P.keyword "distinct"
+      c <- P.ident     -- TODO: use index_parameters
+      return TodoST
+    )
+  return TodoST
+
+primaryKey = do
+  space1
+  P.keyword "primary"
+  space1
+  P.keyword "key"
+  space1
+  a <- P.ident -- TODO: use index_parameters
+  return TodoST
+
+referenceDef = do
+  space1
+  P.keyword "references"
+  space1
+  a <- P.ident
+  b <- optional ( space *> P.inParens P.ident )
+  c <- optional ( do
+      space1
+      P.keyword "match"
+      space1
+      d <- asum [
+          P.keyword "full"
+          , P.keyword "partial"
+          , P.keyword "simple"
+        ]
+      return TodoST
+    )
+  d <- optional ( do
+      space1
+      P.keyword "on"
+      space1
+      P.keyword "delete"
+      e <- referAction
+      f <- optional ( do
+          space1
+          P.keyword "on"
+          space1
+          P.keyword "update"
+          space1
+          referAction
+        )
+      return TodoST
+    )
+  return TodoST
+
+
+-- { NO ACTION | RESTRICT | CASCADE | SET NULL [ ( column_name [, ... ] ) ] | SET DEFAULT [ ( column_name [, ... ] ) ] }
+referAction = do
+  space1
+  asum [
+      do
+      P.keyword "no"
+      space1
+      P.keyword "action"
+      return TodoST
+    , do
+      P.keyword "restrict"
+      return TodoST
+    , do
+      P.keyword "cascade"
+      return TodoST
+    , do
+      P.keyword "set"
+      space1
+      a <- asum [
+          do
+            P.keyword "null"
+            sep1 P.commaSeparator P.ident
+            return TodoST
+          , do
+            P.keyword "default"
+            sep1 P.commaSeparator P.ident
+            return TodoST
+        ]
+      return TodoST
+    ]
+  return TodoST
+
+deferrecity = do
+  space1
+  b <- optional ( P.keyword "not" *> space1 )
+  P.keyword "deferrable"
+  return TodoST
+
+initiallity = do
+  space1
+  P.keyword "initially"
+  space1
+  asum [
+      P.keyword "deffered"
+      , P.keyword "immediate"
+    ]
+  return TodoST
+
 
 
 indexCreate = do

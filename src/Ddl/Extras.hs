@@ -3,6 +3,7 @@ module Ddl.Extras where
 
 import Control.Applicative (many)
 
+import Data.Int
 import Data.List.NonEmpty (NonEmpty (..))
 
 import qualified Text.Megaparsec as M
@@ -23,6 +24,8 @@ space = HM.parse M.space
 char :: (Ord err, M.Stream strm, M.Token strm ~ Char) => Char -> HM.HeadedParsec err strm Char
 char a = HM.parse (M.char a)
 
+decimal :: (Num decimal, Ord err, M.Stream strm, M.Token strm ~ Char) => HM.HeadedParsec err strm decimal
+decimal = HM.parse ML.decimal
 
 -- redundant: , M.Token strm ~ Char
 sep1 :: (Ord err, M.Stream strm) => HM.HeadedParsec err strm separtor -> HM.HeadedParsec err strm a -> HM.HeadedParsec err strm (NonEmpty a)

@@ -36,6 +36,7 @@ library
       Ddl.Extras
       Ddl.Interpret
       Ddl.Parsers
+      Ddl.Printer
       MainLogic
       Options
       Options.Cli

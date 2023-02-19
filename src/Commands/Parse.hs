@@ -4,13 +4,14 @@ import Data.Text (Text, unpack)
 
 import Ddl.Parsers (parseDdl)
 import Ddl.Interpret (convert)
+import Ddl.Printer (showCompact, showIndiv)
+
 
 import qualified Options.Runtime as Rto
 
 
 parseCmd :: Text -> Rto.RunOptions -> IO ()
 parseCmd stmt rtOpts = do
-  putStrLn "@[parseCmd] starting."
   let
     rezA = parseDdl stmt
   case rezA of
@@ -22,5 +23,12 @@ parseCmd stmt rtOpts = do
         rezB = convert ddlStmtList
       in
       case rezB of
-        Right table -> putStrLn $ "@[parseCmd] rez: " <> show table
+        Right (tableMap, leftOver) -> do
+          putStrLn $ "@[parseCmd] rez: " <> show tableMap <> "\n"
+          mapM_ (\m -> do
+             putStrLn "Compact:"
+             putStrLn . unpack $ showCompact m
+             putStrLn "\nIndiv:"
+             putStrLn . unpack $ showIndiv m
+            ) tableMap
         Left errMsg -> putStrLn $ "@[parseCmd] err: " <> unpack errMsg

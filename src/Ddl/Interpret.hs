@@ -36,7 +36,7 @@ data Column = Column {
 
 data SqlType =
   IntST
-  | VarCharST
+  | VarCharST (Maybe Int)
   deriving (Show)
 
 
@@ -122,5 +122,5 @@ columnsConvert columns =
 convertType spec =
   case spec of
     IntCS -> IntST
-    VarcharCS mbN -> VarCharST
+    VarcharCS mbN -> VarCharST mbN
     
