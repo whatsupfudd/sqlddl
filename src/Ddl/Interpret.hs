@@ -10,50 +10,10 @@ import Data.Void (Void)
 
 import qualified PostgresqlSyntax.Ast as A
 
-import Ddl.Parsers
-
-
--- SQL objects
-type ColumnMap = Mp.Map Text Column 
-type ConstraintMap = Mp.Map Text [ Constraint ]
-type TableMap = Mp.Map Text Table
-
-data Table = Table {
-    name :: Text
-    , columns :: ColumnMap
-    , constraints :: ConstraintMap
-  }
-  deriving (Show)
-
-
-data Column = Column {
-    name :: Text
-    , sType :: SqlType
-    , hType :: HkType
-  }
-  deriving (Show)
-
-
-data SqlType =
-  IntST
-  | VarCharST (Maybe Int)
-  deriving (Show)
-
-
-data Constraint = 
-  IndexCN
-  | ReferenceCN
-  | DefaultCN
-  | NullityCN
-  deriving (Show)
-
-
-data HkType = 
-  Int4HT
-  | TextHT
-  | TimeHT
-  | UnknownHT
-  deriving (Show)
+import Ddl.Parsers (DdlStmt (..))
+import Ddl.Entities
+import Ddl.Ast.Create
+import Ddl.Ast.Alter
 
 
 convert :: NonEmpty DdlStmt -> Either Text (TableMap, [AlterStmt])
@@ -88,24 +48,24 @@ convertCtxt (tableMap, leftOver) stmts =
             Just dupTable -> Left $ "@[convCtxt] dup table " <> newTable.name <> "."
   
 
-tableConvert (CreateTable (TableDef ident columns)) =
+tableConvert (CreateTable td) = -- (TableDef kind nexFlag ident columns)
   let
     name =
-      case ident of
+      case td.name of
         A.UnquotedIdent label -> label
         A.QuotedIdent label -> label
-    eiColumns = columnsConvert columns
+    eiColumns = columnsConvert td.columnsList
   in
   case eiColumns of
     Left errMsg -> Left errMsg
     Right colList ->
-      Right $ Table name colList Mp.empty
+      Right $ Table name colList Mp.empty []
   -- TODO: extract colums
 
 
 columnsConvert :: CreateColumnList -> Either Text ColumnMap
 columnsConvert columns =
-  foldl (\accum (CreateColumnItem ident colSpec) ->
+  foldl (\accum (CreateColumnItem ident colSpec constraints) ->
     let
       name =
         case ident of

@@ -2,8 +2,9 @@ module Ddl.Printer where
 
 import Data.Text (Text, pack)
 import qualified Data.Map as Mp
-import Ddl.Interpret
 
+import Ddl.Entities
+-- import Ddl.Interpret
 
 showCompact :: Table -> Text
 showCompact table =

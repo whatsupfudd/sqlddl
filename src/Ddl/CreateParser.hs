@@ -1,7 +1,7 @@
 module Ddl.CreateParser where
 
-import Control.Applicative (asum, optional, many)
-
+import Control.Applicative (asum, optional, many, (<|>))
+import Data.Functor (($>))
 import Data.List.NonEmpty (NonEmpty (..), head, (<|))
 import Data.Void (Void)
 import Data.Text (Text)
@@ -10,33 +10,10 @@ import qualified HeadedMegaparsec as HM
 import qualified PostgresqlSyntax.Ast as A
 import qualified PostgresqlSyntax.Parsing as P
 
+import Ddl.Ast.Create
 import Ddl.Extras
 
 -- create
-
-data CreateStmt =
-  CreateTable TableDef
-  | CreateIndex IndexDef
-  deriving (Show)
-
-type CreateColumnList = NonEmpty CreateColumnItem
-data TableDef = TableDef A.Ident CreateColumnList
-  deriving (Show)
-
-data IndexDef = IndexDef
-  deriving (Show)
-
-data CreateColumnItem = CreateColumnItem A.Ident ColumnSpec
-  deriving (Show)
-
-data ColumnSpec =
-  IntCS
-  | VarcharCS (Maybe Int)
-  deriving (Show)
-
-data ConstrintSpec =
-  TodoST
-  deriving (Show)
 
 
 createStmt :: HM.HeadedParsec Void Text CreateStmt
@@ -45,37 +22,42 @@ createStmt = do
   space1
   a <- asum [
       indexCreate
+      , sequenceCreate
       , tableCreate
+      , schemaCreate
     ]
-  return $ a
+  pure $ a
 
 
 tableCreate = do
-  tOpts <- optional tableKind
+  tKind <- optional tableKind
   P.keyword "table"
   space1
-  -- [ IF NOT EXISTS ]
-  a <- P.ident
+  xF <- optional ( True <$ (P.keyphrase "if not exists" *> space1) )
+  tName <- P.ident
   space1
-  b <- P.inParens columnDefList
-  return . CreateTable $ TableDef a b
+  colList <- P.inParens columnDefList
+  let
+    tExist = case xF of Just _ -> True; Nothing -> False
+  pure . CreateTable $ TableDef tKind tExist tName colList
 
 
 tableKind = do
-  a <- optional (
-          asum [
-            P.keyword "global"
-            , P.keyword "local"
-          ]
-          *> space1
+  a <- optional ( do
+          a <- asum [
+              GlobalLC <$ P.keyword "global"
+              , LocalLC <$ P.keyword "local"
+            ]
+          space1
+          pure a
         )
   b <- asum [
-          P.keyword "temporary"
-          , P.keyword "temp"
-        ]
+      True <$ P.keyword "temporary"
+      , True <$ P.keyword "temp"
+    ]
   space1
-  c <- optional (P.keyword "unlogged" *> space1)
-  return (a, b, c)
+  c <- optional (True <$ (P.keyword "unlogged" *> space1))
+  pure $ TableKind a b c
 
 
 columnDefList = sep1 P.commaSeparator columnDefItem
@@ -88,23 +70,23 @@ columnDefItem = do
   space1
   b <- colDefinition
   c <- optional constraintDef
-  return $ CreateColumnItem a b
+  pure $ CreateColumnItem a b c
 
 
 colDefinition =
   asum [
       do
       P.keyword "int"
-      return $ IntCS
+      pure $ IntCS
     , do
       P.keyword "integer"
-      return $ IntCS
+      pure $ IntCS
     , do
       P.keyword "varchar"
       a <- optional (
           P.inParens decimal
         )
-      return $ VarcharCS a
+      pure $ VarcharCS a
   ]
 
 constraintDef = do
@@ -113,9 +95,13 @@ constraintDef = do
       P.keyword "constraint"
       space1
       P.ident
-      return TodoST
     )
-  b <- many $ asum [
+  lHead <- constraintDefItem
+  lTail <- many constraintDefItem
+  pure $ ConstraintDef a (lHead :| lTail)
+
+constraintDefItem =
+  asum [
       nullity
       , checkExpr
       , defaultExpr
@@ -126,14 +112,12 @@ constraintDef = do
       , deferrecity
       , initiallity
     ]
-  return TodoST
-
 
 nullity = do
   space1
   a <- optional ( P.keyword "not" *> space1 )
   P.keyword "null"
-  return TodoST
+  pure TodoST
 
 checkExpr = do
   space1
@@ -141,18 +125,16 @@ checkExpr = do
   space1
   a <- P.inParens P.ident      -- TODO: use expression
   b <- optional ( do
-      P.keyword "no"
-      space1
-      P.keyword "inherit"
+      P.keyphrase "no inherit"
     )
-  return TodoST
+  pure TodoST
 
 defaultExpr = do
   space1
   P.keyword "default"
   space1
-  a <- P.ident     -- TODO: use expression
-  return TodoST
+  a <- P.aExpr
+  pure $ DefaultCS a
 
 generatedExpr = do
   space1
@@ -160,38 +142,30 @@ generatedExpr = do
   space1
   a <- asum [
         do
-        P.keyword "always"
-        space1
-        P.keyword "as"
+        P.keyphrase "always as"
         space1
         c <- asum [
             do
               P.inParens P.ident
               space1
               P.keyword "stored"
-              return TodoST
+              pure TodoST
             , do
               P.keyword "identity"
               space1
               b <- optional ( P.inParens P.ident )    -- TODO: use sequence_options
-              return TodoST
+              pure TodoST
           ]
-        return TodoST
+        pure TodoST
       , do
-        P.keyword "by"
-        space1
-        P.keyword "default"
-        space1
-        P.keyword "as"
-        space1
-        P.keyword "identity"
+        P.keyphrase "by default as identity"
         space1
         b <- optional (
             P.inParens P.ident    -- TODO: use sequence_options
           )
-        return TodoST
+        pure TodoST
     ]
-  return TodoST
+  pure TodoST
 
 unicity = do
   space1
@@ -203,18 +177,16 @@ unicity = do
       b <- optional ( P.keyword "not" *> space1 )
       P.keyword "distinct"
       c <- P.ident     -- TODO: use index_parameters
-      return TodoST
+      pure TodoST
     )
-  return TodoST
+  pure TodoST
 
 primaryKey = do
   space1
-  P.keyword "primary"
-  space1
-  P.keyword "key"
+  P.keyphrase "primary key"
   space1
   a <- P.ident -- TODO: use index_parameters
-  return TodoST
+  pure TodoST
 
 referenceDef = do
   space1
@@ -231,25 +203,21 @@ referenceDef = do
           , P.keyword "partial"
           , P.keyword "simple"
         ]
-      return TodoST
+      pure TodoST
     )
   d <- optional ( do
       space1
-      P.keyword "on"
-      space1
-      P.keyword "delete"
+      P.keyphrase "on delete"
       e <- referAction
       f <- optional ( do
           space1
-          P.keyword "on"
-          space1
-          P.keyword "update"
+          P.keyphrase "on update"
           space1
           referAction
         )
-      return TodoST
+      pure TodoST
     )
-  return TodoST
+  pure TodoST
 
 
 -- { NO ACTION | RESTRICT | CASCADE | SET NULL [ ( column_name [, ... ] ) ] | SET DEFAULT [ ( column_name [, ... ] ) ] }
@@ -257,16 +225,14 @@ referAction = do
   space1
   asum [
       do
-      P.keyword "no"
-      space1
-      P.keyword "action"
-      return TodoST
+      P.keyphrase "no action"
+      pure TodoST
     , do
       P.keyword "restrict"
-      return TodoST
+      pure TodoST
     , do
       P.keyword "cascade"
-      return TodoST
+      pure TodoST
     , do
       P.keyword "set"
       space1
@@ -274,21 +240,21 @@ referAction = do
           do
             P.keyword "null"
             sep1 P.commaSeparator P.ident
-            return TodoST
+            pure TodoST
           , do
             P.keyword "default"
             sep1 P.commaSeparator P.ident
-            return TodoST
+            pure TodoST
         ]
-      return TodoST
+      pure TodoST
     ]
-  return TodoST
+  pure TodoST
 
 deferrecity = do
   space1
   b <- optional ( P.keyword "not" *> space1 )
   P.keyword "deferrable"
-  return TodoST
+  pure TodoST
 
 initiallity = do
   space1
@@ -298,15 +264,165 @@ initiallity = do
       P.keyword "deffered"
       , P.keyword "immediate"
     ]
-  return TodoST
+  pure TodoST
 
 
-
-indexCreate = do
-  P.keyword "index"
-  return . CreateIndex $ IndexDef
+-- **** INDEX ****
 
 {-
+* ablossom.sql:
+* CREATE INDEX auth_group_name_a6ea08ec_like ON public.auth_group USING btree (name varchar_pattern_ops);
+
+CREATE [ UNIQUE ] INDEX [ CONCURRENTLY ] [ [ IF NOT EXISTS ] name ] ON [ ONLY ] table_name [ USING method ]
+    ( { column_name | ( expression ) } [ COLLATE collation ] [ opclass [ ( opclass_parameter = value [, ... ] ) ] ] [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [, ...] )
+    [ INCLUDE ( column_name [, ...] ) ]
+    [ NULLS [ NOT ] DISTINCT ]
+    [ WITH ( storage_parameter [= value] [, ... ] ) ]
+    [ TABLESPACE tablespace_name ]
+    [ WHERE predicate ]
+-}
+
+indexCreate = do
+  uF <- optional ( True <$ (P.keyword "unique" *> space1) )
+  P.keyword "index"
+  cF <- optional ( True <$ (P.keyword "concurrently" *> space1) )
+  xF <- optional ( True <$ (P.keyphrase "if not exists" *> space1) )
+  space1
+  iName <- P.ident
+  space1
+  P.keyword "on"
+  space1
+  oF <- optional ( P.keyword "only" *> space1 )
+  let
+    tUnique = case uF of Just _ -> True; Nothing -> False
+    tConcur = case cF of Just _ -> True; Nothing -> False
+    tExist = case xF of Just _ -> True; Nothing -> False
+    tOnly = case oF of Just _ -> True; Nothing -> False
+  pure . CreateIndex $ IndexDef tUnique tConcur tExist iName tOnly
+
+
+-- **** SCHEMA ****
+
+{-
+CREATE SCHEMA schema_name [ AUTHORIZATION role_specification ] [ schema_element [ ... ] ]
+CREATE SCHEMA AUTHORIZATION role_specification [ schema_element [ ... ] ]
+CREATE SCHEMA IF NOT EXISTS schema_name [ AUTHORIZATION role_specification ]
+CREATE SCHEMA IF NOT EXISTS AUTHORIZATION role_specification
+
+where role_specification can be:
+
+    user_name
+  | CURRENT_ROLE
+  | CURRENT_USER
+  | SESSION_USER
+
+-}
+
+
+schemaCreate = do
+  P.keyword "schema"
+  xF <- optional ( True <$ space1 *> P.keyphrase "if not exists" )
+  b <- optional ( space1 *> P.ident )
+  c <- optional ( do
+      space1
+      P.keyword "authorization"
+      space1
+      asum [
+          IdentSR <$> P.ident
+          , CurrentRoleSR <$ P.keyword "current_role"
+          , CurrentUserSR <$ P.keyword "current_user"
+          , SessionUserSR <$ P.keyword "session_user"
+       ]
+    )
+  d <- optional ( do
+      space1
+      -- TODO: find out how create statements are properly separated when in a create schema context:
+      sep1 P.commaSeparator createStmt
+    )
+  let
+    tExist = case xF of Just _ -> True; Nothing -> False
+  pure . CreateSchema $ SchemaDef tExist b c d
+
+
+-- **** SEQUENCE ****
+
+{-
+CREATE [ { TEMPORARY | TEMP } | UNLOGGED ] SEQUENCE [ IF NOT EXISTS ] name
+    [ AS data_type ]
+    [ INCREMENT [ BY ] increment ]
+    [ MINVALUE minvalue | NO MINVALUE ] [ MAXVALUE maxvalue | NO MAXVALUE ]
+    [ START [ WITH ] start ] [ CACHE cache ] [ [ NO ] CYCLE ]
+    [ OWNED BY { table_name.column_name | NONE } ]
+-}
+
+sequenceCreate = do
+  P.keyword "sequence"
+  space1
+  xF <- optional ( True <$ P.keyphrase "if not exists" *> space1 )
+  tName <- P.ident
+  asT <- optional ( do
+      space1
+      P.keyword "as"
+      P.ident
+    )
+  incrBy <- optional ( do
+      space1
+      P.keyword "increment"
+      space1
+      optional ( P.keyword "by" *> space1)
+      decimal
+    )
+  minVal <- optional ( do
+      space1
+      P.keyword "minvalue"
+      space1
+      asum [
+          SetValueSB <$> decimal
+          , NoValueSB <$ P.keyphrase "no minvalue"
+        ]
+    )
+  maxVal <- optional ( do
+      space1
+      P.keyword "maxvalue"
+      space1
+      asum [
+          SetValueSB <$> decimal
+          , NoValueSB <$ P.keyphrase "no maxvalue"
+        ]
+    )
+  start <- optional ( do
+      space1
+      P.keyword "start"
+      space1
+      optional ( P.keyword "with" *> space1)
+      decimal
+    )
+  cache <- optional ( do
+      space1
+      P.keyword "cache"
+      space1
+      decimal
+    )
+  cycleFlag <- optional ( do
+      space1
+      tOrF <- optional (False <$ P.keyword "no" *> space1)
+      P.keyword "cycle"
+      pure $ case tOrF of Just _ -> False; Nothing -> True
+    )
+  own <- optional ( do
+      space1
+      P.keyphrase "owned by"
+      space1
+      -- TODO: use the table_name.column_name for owner spec:
+      NoOwnerSO <$ P.keyword "no" <|> OwnerSO <$> P.ident
+    )
+  let
+    tExist = case xF of Just _ -> True; Nothing -> False
+  pure . CreateSequence $ SequenceDef tExist tName asT incrBy minVal maxVal start cache cycleFlag own
+
+
+{-
+
 CREATE [ [ GLOBAL | LOCAL ] { TEMPORARY | TEMP } | UNLOGGED ] TABLE [ IF NOT EXISTS ] table_name ( [
   { column_name data_type [ COMPRESSION compression_method ] [ COLLATE collation ] [ column_constraint [ ... ] ]
     | table_constraint
@@ -395,14 +511,7 @@ referential_action in a FOREIGN KEY/REFERENCES constraint is:
 
 { NO ACTION | RESTRICT | CASCADE | SET NULL [ ( column_name [, ... ] ) ] | SET DEFAULT [ ( column_name [, ... ] ) ] }
 
-----
-CREATE [ UNIQUE ] INDEX [ CONCURRENTLY ] [ [ IF NOT EXISTS ] name ] ON [ ONLY ] table_name [ USING method ]
-    ( { column_name | ( expression ) } [ COLLATE collation ] [ opclass [ ( opclass_parameter = value [, ... ] ) ] ] [ ASC | DESC ] [ NULLS { FIRST | LAST } ] [, ...] )
-    [ INCLUDE ( column_name [, ...] ) ]
-    [ NULLS [ NOT ] DISTINCT ]
-    [ WITH ( storage_parameter [= value] [, ... ] ) ]
-    [ TABLESPACE tablespace_name ]
-    [ WHERE predicate ]
+
 
 ======================================================
 

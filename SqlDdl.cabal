@@ -32,7 +32,10 @@ library
       DB.Connect
       DB.Opers
       Ddl.AlterParser
+      Ddl.Ast.Alter
+      Ddl.Ast.Create
       Ddl.CreateParser
+      Ddl.Entities
       Ddl.Extras
       Ddl.Interpret
       Ddl.Parsers

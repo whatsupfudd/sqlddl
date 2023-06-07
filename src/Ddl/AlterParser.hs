@@ -16,14 +16,12 @@ import qualified PostgresqlSyntax.Ast as A
 import qualified PostgresqlSyntax.Parsing as P
 
 import Ddl.Extras
+import Ddl.Ast.Alter
 
 -- Just to specialize the alterStmt parser with Text:
 -- alterDdl = P.run alterStmt
 
 -- alter
-data AlterStmt =
-  AlterTable A.Ident
-  deriving (Show)
 
 alterStmt :: HM.HeadedParsec Void Text AlterStmt
 alterStmt = do
@@ -40,6 +38,15 @@ alterTable = do
   return $ AlterTable a
 
 {-
+
+* ablossom.sql:
+* alter table <s.t> owner to <owner>;
+* alter sequence <s.t> owned by <s.t.f> ;
+* ALTER TABLE ONLY public.activity_a ALTER COLUMN id SET DEFAULT nextval('public.activity_a_id_seq'::regclass);
+* ALTER TABLE ONLY public.activity_a ADD CONSTRAINT activity_a_pkey PRIMARY KEY (id);
+* ALTER TABLE ONLY public.activity_a ADD CONSTRAINT activity_a_parent_fkey FOREIGN KEY (parent) REFERENCES public.module_a(id);
+* ALTER TABLE ONLY public.auth_group ADD CONSTRAINT auth_group_name_key UNIQUE (name);
+
 
 ALTER TABLE [ IF EXISTS ] [ ONLY ] name [ * ]
     action [, ... ]
